@@ -53,8 +53,8 @@ summary <- all_sims %>%
     .groups = "drop"
   )
 
-dir.create(here("data", "summary"), showWarnings = FALSE, recursive = TRUE)
-saveRDS(summary, here("data", "summary", "summary_all.rds"))
-write.csv(summary, here("data", "summary", "summary_all.csv"), row.names = FALSE)
+dir.create(here("out", "summary"), showWarnings = FALSE, recursive = TRUE)
+saveRDS(summary, here("out", "summary", "summary_all.rds"))
+write.csv(summary, here("out", "summary", "summary_all.csv"), row.names = FALSE)
 
 print(summary)

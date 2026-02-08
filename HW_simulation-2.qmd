@@ -270,42 +270,132 @@ Create a plot or table summarizing simulation results across scenarios and metho
 - Include informative captions for each plot/table.
 - For coverage plots, consider adding a reference line at 0.95.
 
-```{r plot, echo = FALSE, message = FALSE, warning = FALSE}
+```{r summary, echo = FALSE, message = FALSE, warning = FALSE}
 source(here("analysis", "summarize_sim.R"))
 
-summary <- readRDS(here("data", "summary", "summary_all.rds"))
-summary %>%
-  arrange(n, beta, err)
+summary <- readRDS(here("out", "summary", "summary_all.rds"))
+summary <- summary %>%
+  mutate(
+    err  = factor(err, levels = c("normal", "t3")),
+    n    = factor(n, levels = c(10, 50, 500)),
+    beta = factor(beta, levels = c(0, 0.5, 2))
+  )
+```
 
+```{r fig-bias, fig.cap="Bias of the treatment effect estimator $\hat{\\beta}_{treatment}$ across simulation scenarios. The dashed line indicates zero bias."}
+### bias of hat beta
+ggplot(summary, aes(x = n, y = bias, group = 1)) +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  geom_point() +
+  geom_line() +
+  facet_grid(err ~ beta) +
+  labs(
+    title = "Bias of hat beta across simulation scenarios",
+    x = "Sample size (n)",
+    y = "Bias: E[β̂ − β]"
+  ) +
+  theme_bw()
+```
+
+```{r fig-cov, echo = FALSE, message = FALSE, warning = FALSE, fig.cap="Empirical coverage of nominal 95% confidence intervals across simulation scenarios and methods. The dashed line indicates the nominal coverage level of 0.95."}
 cov_long <- summary %>%
   select(n, beta, err, cov_wald, cov_pct, cov_bt) %>%
-  pivot_longer(starts_with("cov_"),
-               names_to = "method",
-               values_to = "coverage")
+  pivot_longer(
+    cols = starts_with("cov_"),
+    names_to = "method",
+    values_to = "coverage"
+  ) %>%
+  mutate(
+    method = recode(method,
+      cov_wald = "Wald",
+      cov_pct  = "Bootstrap percentile",
+      cov_bt   = "Bootstrap-t"
+    )
+  )
 
-ggplot(cov_long, aes(x = n, y = coverage, color = method)) +
+ggplot(cov_long, aes(x = n, y = coverage, color = method, group = method)) +
+  geom_hline(yintercept = 0.95, linetype = "dashed") +
   geom_point() +
   geom_line() +
-  geom_hline(yintercept = 0.95, linetype = "dashed") +
   facet_grid(err ~ beta) +
-  scale_x_log10() +
+  ylim(0, 1) +
+  labs(
+    title = "Empirical coverage of 95% CIs across scenarios",
+    x = "Sample size (n)",
+    y = "Coverage probability",
+    color = "Method"
+  ) +
   theme_bw()
 
-## computation time
+```
+
+
+```{r fig-se, fig.cap="Distribution of the model-based standard error estimates se(β̂) across Monte Carlo replicates. Faceted by error distribution and true treatment effect; shown separately for each sample size."}
+# read replicate-level se_hat from all scenarios
+rep_dirs <- list.dirs("data", recursive = FALSE)
+read_se_one_dir <- function(dir) {
+  files <- list.files(dir, full.names = TRUE)
+  sims <- do.call(rbind, lapply(files, readRDS))
+  
+  nm <- basename(dir)
+  parts <- strsplit(nm, "_")[[1]]
+  n <- as.integer(sub("n", "", parts[1]))
+  beta <- as.numeric(sub("beta", "", parts[2]))
+  err <- parts[3]
+  
+  sims %>%
+    transmute(
+      n = factor(n, levels = c(10, 50, 500)),
+      beta = factor(beta, levels = c(0, 0.5, 2)),
+      err = factor(err, levels = c("normal", "t3")),
+      se_hat = se_hat
+    )
+}
+
+se_df <- do.call(rbind, lapply(rep_dirs, read_se_one_dir)) %>%
+  filter(is.finite(se_hat))
+
+ggplot(se_df, aes(x = se_hat)) +
+  geom_histogram(bins = 30) +
+  facet_grid(err ~ beta) +
+  labs(
+    title = "Distribution of se(β̂) across replicates",
+    x = "se(β̂) from lm()",
+    y = "Count"
+  ) +
+  theme_bw()
+
+
+```
+
+```{r fig-time, fig.cap="Average computation time per replicate for each CI method across scenarios. Times are measured within each replicate using system.time and then averaged across completed replicates. Y-axis uses log scale for readability."}
 time_long <- summary %>%
   select(n, beta, err, time_wald, time_pct, time_bt) %>%
-  pivot_longer(starts_with("time_"),
-               names_to = "method",
-               values_to = "time")
+  pivot_longer(
+    cols = starts_with("time_"),
+    names_to = "method",
+    values_to = "time_sec"
+  ) %>%
+  mutate(
+    method = recode(method,
+      time_wald = "Wald",
+      time_pct  = "Bootstrap percentile",
+      time_bt   = "Bootstrap-t"
+    )
+  )
 
-ggplot(time_long, aes(x = n, y = time, color = method)) +
+ggplot(time_long, aes(x = n, y = time_sec, color = method, group = method)) +
   geom_point() +
   geom_line() +
-  scale_x_log10() +
-  scale_y_log10() +
   facet_grid(err ~ beta) +
+  scale_y_log10() +
+  labs(
+    title = "Computation time per replicate across CI methods",
+    x = "Sample size (n)",
+    y = "Mean time (seconds, log scale)",
+    color = "Method"
+  ) +
   theme_bw()
-
 ```
 
 ### Problem 1.5 Discussion
@@ -322,3 +412,18 @@ Interpret the results summarized   in Problem 1.4.
 
 
 Finally, briefly comment on any notable interactions (e.g., how performance changes with $n$ or error type) and any practical recommendations you would make based on your results.
+
+
+#### My discussion:
+
+1. Overall, the simulation study suggests that the OLS estimator of the treatment effect is essentially unbiased across all scenarios, with any finite-sample bias being small and shrinking as the sample size increases. Empirical coverage of nominal 95% confidence intervals improves with larger $n$ and is generally close to 0.95 for $n=500$ under both error distributions. In small samples $(n=10)$, coverage is noticeably method-dependent: the bootstrap-t interval tends to have the best (often slightly conservative) coverage, while the percentile bootstrap is most prone to under-coverage; the Wald interval typically falls in between and improves quickly as $n$ increases. The estimated standard errors $se(\hat \beta)$ show a right-skewed distribution, with heavier tails leading to greater variability, especially at small $n$. Computation time differs dramatically across methods: Wald intervals are essentially instantaneous, the percentile bootstrap is substantially slower, and bootstrap-t is by far the most computationally intensive.
+
+
+
+
+
+
+
+
+
+
