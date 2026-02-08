@@ -23,12 +23,25 @@ gen_data <- function(n, beta_treat, err = c("normal", "t3"), beta0 = 0, sigma2 =
 }
 
 fit_theta <- function(dat) {
+  # enforce numeric 0/1 for stability
+  dat$x <- as.numeric(dat$x)
+  
   fit <- stats::lm(y ~ x, data = dat)
-  co <- summary(fit)$coef
-  theta_hat <- unname(co["x", "Estimate"])
-  se_hat <- unname(co["x", "Std. Error"])
+  cf  <- stats::coef(fit)
+  vc  <- tryCatch(stats::vcov(fit), error = function(e) NULL)
+  
+  # if x is not estimable (e.g., all x are 0 or all 1), coef won't contain it
+  if (!("x" %in% names(cf)) || is.null(vc) || !("x" %in% colnames(vc))) {
+    return(list(theta_hat = NA_real_, se_hat = NA_real_))
+  }
+  
+  theta_hat <- unname(cf["x"])
+  se_hat    <- unname(sqrt(diag(vc))["x"])
+  
   list(theta_hat = theta_hat, se_hat = se_hat)
 }
+
+
 
 ci_wald <- function(theta_hat, se_hat, alpha = 0.05) {
   zcrit <- stats::qnorm(1 - alpha/2)
@@ -44,9 +57,19 @@ ci_boot_percentile <- function(dat, B = 500, alpha = 0.05) {
     fit_theta(dat[idx, , drop = FALSE])$theta_hat
   })
   
-  ci <- stats::quantile(thetas, probs = c(alpha/2, 1 - alpha/2), names = FALSE, type = 8)
-  list(ci = ci, theta_hat = theta_hat, boot_thetas = thetas)
+  thetas_ok <- thetas[is.finite(thetas_ok <- thetas)]
+  if (length(thetas_ok) < 50) {  
+    return(list(ci = c(NA_real_, NA_real_), theta_hat = theta_hat,
+                boot_thetas = thetas, n_eff = length(thetas_ok)))
+  }
+  
+  ci <- stats::quantile(thetas_ok,
+                        probs = c(alpha/2, 1 - alpha/2),
+                        names = FALSE, type = 8)
+  
+  list(ci = ci, theta_hat = theta_hat, boot_thetas = thetas, n_eff = length(thetas_ok))
 }
+
 
 ci_boot_t <- function(dat, B = 500, B_inner = 100, alpha = 0.05) {
   n <- nrow(dat)
@@ -61,15 +84,20 @@ ci_boot_t <- function(dat, B = 500, B_inner = 100, alpha = 0.05) {
     dat_b <- dat[idx_b, , drop = FALSE]
     
     theta_b <- fit_theta(dat_b)$theta_hat
+    if (!is.finite(theta_b)) {
+      tstars[b] <- NA_real_
+      next
+    }
     
     # inner bootstrap for se(theta_b)
     theta_inner <- replicate(B_inner, {
       idx_in <- sample.int(n, n, replace = TRUE)
       fit_theta(dat_b[idx_in, , drop = FALSE])$theta_hat
     })
+    theta_inner <- theta_inner[is.finite(theta_inner)]
     se_b <- stats::sd(theta_inner)
     
-    if (is.na(se_b) || se_b <= 0) {
+    if (!is.finite(se_b) || se_b <= 0) {
       tstars[b] <- NA_real_
     } else {
       tstars[b] <- (theta_b - theta_hat) / se_b
@@ -77,14 +105,20 @@ ci_boot_t <- function(dat, B = 500, B_inner = 100, alpha = 0.05) {
   }
   
   tstars <- tstars[is.finite(tstars)]
+  if (length(tstars) < 50 || !is.finite(se_hat)) {
+    return(list(ci = c(NA_real_, NA_real_), theta_hat = theta_hat,
+                se_hat = se_hat, tstars = tstars, n_eff = length(tstars)))
+  }
+  
   q_lo <- stats::quantile(tstars, probs = 1 - alpha/2, names = FALSE, type = 8)
   q_hi <- stats::quantile(tstars, probs = alpha/2, names = FALSE, type = 8)
   
   ci <- c(theta_hat - q_lo * se_hat,
           theta_hat - q_hi * se_hat)
   
-  list(ci = ci, theta_hat = theta_hat, se_hat = se_hat, tstars = tstars)
+  list(ci = ci, theta_hat = theta_hat, se_hat = se_hat, tstars = tstars, n_eff = length(tstars))
 }
+
 
 one_rep <- function(n, beta_treat, err, B = 500, B_inner = 100, alpha = 0.05) {
   dat <- gen_data(n = n, beta_treat = beta_treat, err = err)

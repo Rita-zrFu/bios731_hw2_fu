@@ -17,6 +17,10 @@ execute:
 
 ```{r, echo = FALSE}
 library(tidyverse)
+library(here)
+library(dplyr)
+library(tidyr)
+library(ggplot2)
 ```
 
 ## Context and learning objectives
@@ -199,8 +203,31 @@ where
 #### My implementation:
 
 ```{r echo = FALSE, message = FALSE, warning = FALSE}
-source("code/sim_functions.R")
-source("code/run_one_scenario.R")
+source(here("code", "sim_function.R"))
+source(here("code", "run_one_scenario.R"))
+set.seed(1)
+
+# # Small run just to verify everything works (NOT the final run)
+# tmp <- one_rep(n = 10, beta_treat = 0.5, err = "normal",
+#                B = 50, B_inner = 20, alpha = 0.05)
+# 
+# tmp
+
+# run one scenario and save to disk (demo size)
+out_file <- run_one_scenario(
+  n = 50,
+  beta_treat = 0.5,
+  err = "t3",
+  nSim = 1,       # demo; use 500 in final
+  B = 500,
+  B_inner = 100,
+  alpha = 0.05,
+  out_dir = "data",
+  seed = 731,
+  overwrite = TRUE
+)
+
+out_file
 
 ```
 
@@ -243,6 +270,43 @@ Create a plot or table summarizing simulation results across scenarios and metho
 - Include informative captions for each plot/table.
 - For coverage plots, consider adding a reference line at 0.95.
 
+```{r plot, echo = FALSE, message = FALSE, warning = FALSE}
+source(here("analysis", "summarize_sim.R"))
+
+summary <- readRDS(here("data", "summary", "summary_all.rds"))
+summary %>%
+  arrange(n, beta, err)
+
+cov_long <- summary %>%
+  select(n, beta, err, cov_wald, cov_pct, cov_bt) %>%
+  pivot_longer(starts_with("cov_"),
+               names_to = "method",
+               values_to = "coverage")
+
+ggplot(cov_long, aes(x = n, y = coverage, color = method)) +
+  geom_point() +
+  geom_line() +
+  geom_hline(yintercept = 0.95, linetype = "dashed") +
+  facet_grid(err ~ beta) +
+  scale_x_log10() +
+  theme_bw()
+
+## computation time
+time_long <- summary %>%
+  select(n, beta, err, time_wald, time_pct, time_bt) %>%
+  pivot_longer(starts_with("time_"),
+               names_to = "method",
+               values_to = "time")
+
+ggplot(time_long, aes(x = n, y = time, color = method)) +
+  geom_point() +
+  geom_line() +
+  scale_x_log10() +
+  scale_y_log10() +
+  facet_grid(err ~ beta) +
+  theme_bw()
+
+```
 
 ### Problem 1.5 Discussion
 
