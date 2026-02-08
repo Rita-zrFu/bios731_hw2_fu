@@ -110,6 +110,8 @@ $$
 \epsilon_i = u \cdot \sqrt{2\,\frac{\nu-2}{\nu}}.
 $$
 
+
+
 ### Problem 1.1 ADEMP Structure 
 
 Answer the following questions. Use the ADEMP framework explicitly:
@@ -124,10 +126,62 @@ Also answer:
 
 - How many simulation scenarios will you be running (i.e., how many unique combinations in the full factorial design)?
 
+#### My answers:
+
+- **A (Aim):** The aim of this simulation study is to evaluate the finite-sample performance of confidence interval procedures for the treatment effect parameter $\beta_{\text{treatment}}$ in a linear regression model.
+
+Specifically, we assess and compare the bias, coverage probability, and variability of standard error estimates for Wald confidence intervals and two nonparametric bootstrap-based confidence intervals (percentile and bootstrap-t) under varying sample sizes, true treatment effects, and error distributions.
+
+- **D (Data-generating mechanism):** We generate data according to the linear regression model
+$$Y_i = \beta_0 + \beta_{\text{treatment}} X_{i1}+\epsilon_i$$
+where $X_{i1}$ is a binary treatment indicator, and $\epsilon_i$ are error terms. For simplicity, no additional confounders are included in the data-generating mechanism. We vary the following factors across simulation scenarios:
+
+- Sample size: $n \in \{10, 50, 500\}$
+
+- True treatment effect: $\beta_{\text{treatment}} \in \{0,0.5,2\}$
+
+- Error distribution:
+
+  - Normal errors: $\epsilon_i \sim N(0,2)$
+  
+  - Heavy-tailed errors: $\epsilon_i \sim t_{\nu}$ with $\nu=3$, scaled to have variance 2
+  
+- **E (Estimand):** The primary estimand of interest is the treatment effect parameter $\beta_{\text{treatment}}$ in the linear regression model. We also focus on the standard error of the estimator $\hat{\beta}_{\text{treatment}}$.
+
+- **M (Methods):** We evaluate three methods for constructing 95% confidence intervals for $\hat{\beta}_{\text{treatment}}$:
+
+1. Wald confidence intervals based on the standard error from the fitted linear model.
+
+2. Nonparametric bootstrap percentile intervals, which use the empirical distribution of $\hat{\beta}_{\text{treatment}}^*$ from bootstrap resamples.
+
+3. Nonparametric bootstrap $t$ intervals, which standardize the bootstrap estimates using their estimated standard errors from a second level of bootstrapping.
+
+- **P (Performance measures):** We summarize performance using the following metrics:
+
+1. Bias of $\hat{\beta}_{\text{treatment}}$: the average difference between the estimated and true treatment effect across simulations.
+
+2. Coverage probability of the 95% confidence intervals: the proportion of simulations in which the interval contains the true treatment effect.
+
+3. Distribution of the estimated standard error $se(\hat{\beta}_{\text{treatment}})$ across simulations.
+
+4. Computation time for each method, measured in seconds.
+
+- **Number of simulation scenarios:** There are 3 levels of sample size, 3 levels of true treatment effect, and 2 levels of error distribution, resulting in a total of $3 \times 3 \times 2 = 18$ unique simulation scenarios.
 
 ### Problem 1.2 nSim 
 
 Based on desired coverage of 95% with Monte Carlo error of no more than 1%, how many simulations ($n_{sim}$) should you perform for **each** simulation scenario? Implement this value of $n_{\text{sim}}$ throughout your simulation study.
+
+#### My answer:
+To achieve a Monte Carlo error of no more than 1% for estimating the coverage probability of 95%, we can use the formula for the standard error of a proportion:
+
+$$SE = \sqrt{\frac{p(1-p)}{n_{sim}}},$$
+where $p$ is the true coverage probability (0.95 in this case). We want this standard error to be less than or equal to 0.01:
+$$
+\sqrt{0.95(1-0.95)/n_{sim}}\leq 0.01,
+$$
+which yields $n_{sim} \geq 475$. To be conservative, we can round up to $n_{sim} = 500$ simulations per scenario to ensure that the Monte Carlo error is within the desired threshold.
+
 
 
 ### Problem 1.3 Implementation 
@@ -142,6 +196,13 @@ where
 - $\hat{\theta}$: parameter estimate from the original sample
 - $s_{\hat{\theta}^*}$ standard error estimate from a given bootstrap sample; requires a second level of bootstrapping to construct.
 
+#### My implementation:
+
+```{r echo = FALSE, message = FALSE, warning = FALSE}
+source("code/sim_functions.R")
+source("code/run_one_scenario.R")
+
+```
 
 #### Parameter choices 
 
