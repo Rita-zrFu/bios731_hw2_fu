@@ -1,6 +1,6 @@
 ---
 title: "Homework 2: A simulation study investigating the bootstrap"
-author: "BIOS 731 – Advanced Statistical Computing"
+author: "Rita Fu"
 format:
   pdf:
     colorlinks: true
@@ -22,6 +22,11 @@ library(dplyr)
 library(tidyr)
 library(ggplot2)
 ```
+
+## Web address of my GitHub repository
+
+https://github.com/Rita-zrFu/bios731_hw2_fu
+
 
 ## Context and learning objectives
 
