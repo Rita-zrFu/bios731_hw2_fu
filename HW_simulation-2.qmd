@@ -205,31 +205,13 @@ where
 ```{r echo = FALSE, message = FALSE, warning = FALSE}
 source(here("code", "sim_function.R"))
 source(here("code", "run_one_scenario.R"))
-set.seed(1)
-
-# # Small run just to verify everything works (NOT the final run)
-# tmp <- one_rep(n = 10, beta_treat = 0.5, err = "normal",
-#                B = 50, B_inner = 20, alpha = 0.05)
-# 
-# tmp
-
-# run one scenario and save to disk (demo size)
-out_file <- run_one_scenario(
-  n = 50,
-  beta_treat = 0.5,
-  err = "t3",
-  nSim = 1,       # demo; use 500 in final
-  B = 500,
-  B_inner = 100,
-  alpha = 0.05,
-  out_dir = "data",
-  seed = 731,
-  overwrite = TRUE
-)
-
-out_file
-
 ```
+
+To improve computational efficiency, simulation scenarios were parallelized on a computing cluster using Slurm array jobs. For each scenario (defined by sample size, true treatment effect, and error distribution), a shell script (submit_array.sh) was used to submit an array job, where each task ran a single replicate by calling an R script (run_rep.R). Each replicate saved its results as an intermediate .rds file in a scenario-specific subfolder under data/.
+
+After all simulation scenarios completed, the intermediate results were downloaded to a local machine and aggregated in a post-processing step using a separate R script. This script combined replicate-level outputs into scenario-level summaries, which were then used to generate all tables and figures reported in the analysis.
+
+All file paths were specified using relative paths, and intermediate simulation outputs were excluded from version control via .gitignore to ensure a clean and reproducible project structure.
 
 #### Parameter choices 
 
@@ -282,7 +264,7 @@ summary <- summary %>%
   )
 ```
 
-```{r fig-bias, fig.cap="Bias of the treatment effect estimator $\hat{\\beta}_{treatment}$ across simulation scenarios. The dashed line indicates zero bias."}
+```{r fig-bias, fig.cap="Bias of the treatment effect estimator hat beta_treatment$ across simulation scenarios. The dashed line indicates zero bias."}
 ### bias of hat beta
 ggplot(summary, aes(x = n, y = bias, group = 1)) +
   geom_hline(yintercept = 0, linetype = "dashed") +
@@ -418,8 +400,21 @@ Finally, briefly comment on any notable interactions (e.g., how performance chan
 
 1. Overall, the simulation study suggests that the OLS estimator of the treatment effect is essentially unbiased across all scenarios, with any finite-sample bias being small and shrinking as the sample size increases. Empirical coverage of nominal 95% confidence intervals improves with larger $n$ and is generally close to 0.95 for $n=500$ under both error distributions. In small samples $(n=10)$, coverage is noticeably method-dependent: the bootstrap-t interval tends to have the best (often slightly conservative) coverage, while the percentile bootstrap is most prone to under-coverage; the Wald interval typically falls in between and improves quickly as $n$ increases. The estimated standard errors $se(\hat \beta)$ show a right-skewed distribution, with heavier tails leading to greater variability, especially at small $n$. Computation time differs dramatically across methods: Wald intervals are essentially instantaneous, the percentile bootstrap is substantially slower, and bootstrap-t is by far the most computationally intensive.
 
+2.1 computation time
 
+The Wald interval is the fastest method by orders of magnitude, since it only requires one model fit and an analytic standard error. The percentile bootstrap is slower because it refits the model many times (one bootstrap loop), but remains far more feasible than bootstrap-t. Bootstrap-t is the slowest by a large margin because it requires an outer bootstrap plus an inner bootstrap to estimate the standard error within each outer sample (a nested bootstrap), which leads to much larger computational cost. This pattern is consistent across all scenarios and does not materially depend on the true treatment effect; any changes with $n$ are small compared with the method-driven differences.
 
+2.2 best coverage under normal errors
+
+Under normal errors, all three methods approach the nominal 0.95 coverage as $n$ increases, and by $n=500$ the differences are minimal. In the smallest sample size, the bootstrap-t interval generally provides the best coverage (often slightly above 0.95, indicating mild conservatism), while the Wald interval is reasonably close and improves quickly with $n$. The percentile bootstrap shows the most under-coverage at $n=10$, but it also converges toward 0.95 as $n$ increases.
+
+2.3 best coverage under heavy-tailed errors
+
+With heavy-tailed errors, the advantage of bootstrap-t is more apparent in small samples: it tends to maintain coverage closest to (or slightly above) 0.95, reflecting additional robustness from studentizing. The Wald interval also improves with $n$ and is close to nominal for moderate to large sample sizes, but is less reliable at $n=10$. The percentile bootstrap again shows the most pronounced under-coverage in the smallest sample size, suggesting that the percentile method is more sensitive to skewness/heavy tails in finite samples.
+
+2.4 interactions and practical recommendations
+
+The most notable interaction is between sample size and error distribution: heavy tails increase the variability of $se(\hat \beta)$ and make small-sample inference harder, which is where the choice of CI method matters most. Method differences largely vanish as $n$ grows, consistent with asymptotic normality of $\hat \beta$. Practically, if computation is a major constraint (or $n$ is moderate/large), the Wald interval is a strong default because it is extremely fast and performs well once $n$ is not tiny. If the sample size is very small and/or the error distribution may be heavy-tailed, bootstrap-t provides the most reliable coverage but at substantial computational cost, making it best used when accuracy is prioritized over runtime. The percentile bootstrap is attractive for its simplicity, but based on these results it is the least reliable in small samples (especially under heavy tails) and should be used cautiously when accurate coverage is important.
 
 
 
